@@ -9,6 +9,7 @@ from django.contrib.auth.models import User, Group
 from .serializers import UserSerializer, GroupSerializer, FlavorSerializer
 from .serializers import CourseSerializer, QuestionSerializer
 from .serializers import AssessmentSerializer, ScoreSerializer
+from .functions import get_ten_random_questions, page_handler
 from .forms import UserForm
 import random
 from django.core.urlresolvers import reverse
@@ -91,49 +92,89 @@ def student(request, id):
     return render(request, 'students/student_dash.html', context)
 
 
-def tutorial_question(request, question_id):
+def test_tutorial(request, question_id):
     question = Question.objects.get(pk=question_id)
     answers = question.possible_solutions.split('|')
     random.shuffle(answers)
     context = {'question': question, 'answers': answers}
-    if question.flavor.name == 'fill-in-the-blank':
-        template = 'students/text_question.html'
-    elif question.flavor.name == 'multiple choice':
-        template = 'students/multi_choice_question.html'
-    elif question.flavor.name == 'multi-select':
-        correct = question.solution.split('|')
-        context['correct'] = correct
-        template = 'students/multi_select_question.html'
-    elif question.flavor.name == 'drag-and-drop':
+    # I wasn't sure how to fully get away from the if statements here, and used
+    # them to tackle passing creating the "correct" dictionary.
+    if question.flavor.name == 'drag-and-drop':
         answers = answers.sort()
         solutions = question.solution.split('|')
         correct = {}
         for answer in solutions:
             temp = answer.split(':')
             correct[temp[0]] = temp[1]
-        context['solutions'] = correct
-        template = 'students/drag_drop_question.html'
-    elif question.flavor.name == 'fraction-fill-in':
-        table_cells = int(question.description) * 'x'
-        context['table_cells'] = table_cells
-        template = 'students/fraction_question.html'
     elif question.flavor.name == 'bar graph':
         solutions = question.solution.split('|')
         correct = {}
         for answer in solutions:
             temp = answer.split(':')
             correct[temp[0]] = temp[1]
-        context['correct'] = correct
-        context['graph_width'] = len(answers)
         graph_height = max([int(item) for item in correct.values()])
-        context['graph_height'] = graph_height
-        context['graph_title'] = question.description
-        context['x_labels'] = list(correct.keys())
         y_labels = list(range(1, graph_height + 1))
         y_labels.reverse()
-        context['y_labels'] = y_labels
-        template = 'students/graph_question.html'
-    return render(request, template, context)
+    flavors = {
+        'fill-in-the-blank': (lambda question: (('template', 'students/text_question.html'),)),
+        'multiple choice': (lambda question: (('template', 'students/multi_choice_question.html'),)),
+        'multi-select': (lambda question: (('template', 'students/multi_select_question.html'), ('correct', question.solution.split('|')))),
+        'drag-and-drop': (lambda question: (('template', 'students/drag_drop_question.html'), ('solutions', correct))),
+        'fraction-fill-in': (lambda question: (('template', 'students/fraction_question.html'), ('table_cells', int(question.description) * 'x'))),
+        'bar graph': (lambda question: (('template', 'students/graph_question.html'),
+                                        ('correct', correct),
+                                        ('graph_width', len(answers)),
+                                        ('graph_height', max([int(item) for item in correct.values()])),
+                                        ('graph_title', question.description),
+                                        ('x_labels', list(correct.keys())),
+                                        ('y_labels', y_labels)))}
+    for detail in flavors[question.flavor.name](question):
+        context[detail[0]] = detail[1]
+    return render(request, context['template'], context)
+
+# def tutorial_question(request, question_id):
+#     question = Question.objects.get(pk=question_id)
+#     answers = question.possible_solutions.split('|')
+#     random.shuffle(answers)
+#     context = {'question': question, 'answers': answers}
+#     if question.flavor.name == 'fill-in-the-blank':
+#         template = 'students/text_question.html'
+#     elif question.flavor.name == 'multiple choice':
+#         template = 'students/multi_choice_question.html'
+#     elif question.flavor.name == 'multi-select':
+#         correct = question.solution.split('|')
+#         context['correct'] = correct
+#         template = 'students/multi_select_question.html'
+#     elif question.flavor.name == 'drag-and-drop':
+#         answers = answers.sort()
+#         solutions = question.solution.split('|')
+#         correct = {}
+#         for answer in solutions:
+#             temp = answer.split(':')
+#             correct[temp[0]] = temp[1]
+#         context['solutions'] = correct
+#         template = 'students/drag_drop_question.html'
+#     elif question.flavor.name == 'fraction-fill-in':
+#         table_cells = int(question.description) * 'x'
+#         context['table_cells'] = table_cells
+#         template = 'students/fraction_question.html'
+#     elif question.flavor.name == 'bar graph':
+#         solutions = question.solution.split('|')
+#         correct = {}
+#         for answer in solutions:
+#             temp = answer.split(':')
+#             correct[temp[0]] = temp[1]
+#         context['correct'] = correct
+#         context['graph_width'] = len(answers)
+#         graph_height = max([int(item) for item in correct.values()])
+#         context['graph_height'] = graph_height
+#         context['graph_title'] = question.description
+#         context['x_labels'] = list(correct.keys())
+#         y_labels = list(range(1, graph_height + 1))
+#         y_labels.reverse()
+#         context['y_labels'] = y_labels
+#         template = 'students/graph_question.html'
+#     return render(request, template, context)
 
 
 def get_queryset_by_level(request, difficulty_level):
@@ -206,29 +247,32 @@ def get_queryset_by_level(request, difficulty_level):
 
 
 def graph(request):
-    questions = Question.objects.filter(flavor=6)
-    questions = list(questions)
-    random.seed(42)
-    random.shuffle(questions)
-    questions = questions[:10]
-    paginator = Paginator(questions, 1)
-    page = request.GET.get('page')
-    context = {}
-    try:
-        pager = paginator.page(page)
-        question = pager[0]
-    except PageNotAnInteger:
-        # If page is not an integer, deliver first page.
-        pager = paginator.page(1)
-        question = pager[0]
-    except EmptyPage:
-        # If page is out of range (e.g. 9999), deliver last page of results.
-        # pager = paginator.page(paginator.num_pages)
-        return HttpResponseRedirect('/')
+    # questions = Question.objects.filter(flavor=6)
+    # questions = list(questions)
+    # random.seed(42)
+    # random.shuffle(questions)
+    # questions = questions[:10]
+    questions = get_ten_random_questions(Question, 6)
+    # context = {}
+    pager, question, context = page_handler(questions, request)
+    # paginator = Paginator(questions, 1)
+    # page = request.GET.get('page')
+    # context = {}
+    # try:
+    #     pager = paginator.page(page)
+    #     question = pager[0]
+    # except PageNotAnInteger:
+    #     # If page is not an integer, deliver first page.
+    #     pager = paginator.page(1)
+    #     question = pager[0]
+    # except EmptyPage:
+    #     # If page is out of range (e.g. 9999), deliver last page of results.
+    #     # pager = paginator.page(paginator.num_pages)
+    #     return HttpResponseRedirect('/')
     answers = question.possible_solutions.split('|')
     random.shuffle(answers)
-    context['pager'] = pager
-    context['question'] = question
+    # context['pager'] = pager
+    # context['question'] = question
     context['answers'] = answers
     solutions = question.solution.split('|')
     correct = {}
@@ -248,25 +292,27 @@ def graph(request):
 
 
 def fill_blank(request):
-    questions = Question.objects.filter(flavor=2)
-    questions = list(questions)
-    random.seed(42)
-    random.shuffle(questions)
-    questions = questions[:10]
-    paginator = Paginator(questions, 1)
-    page = request.GET.get('page')
-    context = {}
-    try:
-        pager = paginator.page(page)
-        question = pager[0]
-    except PageNotAnInteger:
-        # If page is not an integer, deliver first page.
-        pager = paginator.page(1)
-        question = pager[0]
-    except EmptyPage:
-        # If page is out of range (e.g. 9999), deliver last page of results.
-        # pager = paginator.page(paginator.num_pages)
-        return HttpResponseRedirect('/')
+    # questions = Question.objects.filter(flavor=2)
+    # questions = list(questions)
+    # random.seed(42)
+    # random.shuffle(questions)
+    # questions = questions[:10]
+    questions = get_ten_random_questions(Question, 2)
+    pager, question, context = page_handler(questions, request)
+    # paginator = Paginator(questions, 1)
+    # page = request.GET.get('page')
+    # context = {}
+    # try:
+    #     pager = paginator.page(page)
+    #     question = pager[0]
+    # except PageNotAnInteger:
+    #     # If page is not an integer, deliver first page.
+    #     pager = paginator.page(1)
+    #     question = pager[0]
+    # except EmptyPage:
+    #     # If page is out of range (e.g. 9999), deliver last page of results.
+    #     # pager = paginator.page(paginator.num_pages)
+    #     return HttpResponseRedirect('/')
     answers = question.possible_solutions.split('|')
     random.shuffle(answers)
     context['pager'] = pager
