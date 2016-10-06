@@ -321,63 +321,95 @@ def fill_blank(request):
     return render(request, 'practice/fill_in_the_blank_practice.html', context)
 
 
-def multiple_choice(request):
-    questions = Question.objects.filter(flavor=1)
-    questions = list(questions)
-    random.seed(42)
-    random.shuffle(questions)
-    questions = questions[:10]
-    print([question.id for question in questions])
-    paginator = Paginator(questions, 1)
-    page = request.GET.get('page')
-    context = {}
-    try:
-        pager = paginator.page(page)
-        question = pager[0]
-    except PageNotAnInteger:
-        # If page is not an integer, deliver first page.
-        pager = paginator.page(1)
-        question = pager[0]
-    except EmptyPage:
-        # If page is out of range (e.g. 9999), deliver last page of results.
-        # pager = paginator.page(paginator.num_pages)
-        return HttpResponseRedirect('/')
-    answers = question.possible_solutions.split('|')
-    random.shuffle(answers)
-    context['pager'] = pager
-    context['question'] = question
-    context['answers'] = answers
-    return render(request, 'practice/multi_choice_practice.html', context)
+class TestMultiChoiceView(TemplateView):
+    template_name = "practice/multi_choice_practice.html"
+    model = Question
+    paginate_by = 1
+
+    def get_context_data(self, **kwargs):
+        questions = get_ten_random_questions(Question, 1)
+        pager, question, context = page_handler(questions, self.request)
+        answers = question.possible_solutions.split('|')
+        random.shuffle(answers)
+        context['pager'] = pager
+        context['question'] = question
+        context['answers'] = answers
+        return context
+
+# def multiple_choice(request):
+#     questions = Question.objects.filter(flavor=1)
+#     questions = list(questions)
+#     random.seed(42)
+#     random.shuffle(questions)
+#     questions = questions[:10]
+#     print([question.id for question in questions])
+#     paginator = Paginator(questions, 1)
+#     page = request.GET.get('page')
+#     context = {}
+#     try:
+#         pager = paginator.page(page)
+#         question = pager[0]
+#     except PageNotAnInteger:
+#         # If page is not an integer, deliver first page.
+#         pager = paginator.page(1)
+#         question = pager[0]
+#     except EmptyPage:
+#         # If page is out of range (e.g. 9999), deliver last page of results.
+#         # pager = paginator.page(paginator.num_pages)
+#         return HttpResponseRedirect('/')
+#     answers = question.possible_solutions.split('|')
+#     random.shuffle(answers)
+#     context['pager'] = pager
+#     context['question'] = question
+#     context['answers'] = answers
+#     return render(request, 'practice/multi_choice_practice.html', context)
 
 
-def fraction_fill_in(request):
-    questions = Question.objects.filter(flavor=5)
-    questions = list(questions)
-    random.seed(42)
-    random.shuffle(questions)
-    questions = questions[:10]
-    paginator = Paginator(questions, 1)
-    page = request.GET.get('page')
-    print(paginator.num_pages)
-    context = {}
-    try:
-        pager = paginator.page(page)
-        question = pager[0]
-    except PageNotAnInteger:
-        # If page is not an integer, deliver first page.
-        pager = paginator.page(1)
-        question = pager[0]
-    except EmptyPage:
-        # If page is out of range (e.g. 9999), deliver last page of results.
-        # pager = paginator.page(paginator.num_pages)
-        return HttpResponseRedirect('/')
-    answers = question.possible_solutions.split('|')
-    table_cells = int(question.description) * 'x'
-    context['table_cells'] = table_cells
-    context['pager'] = pager
-    context['question'] = question
-    context['answers'] = answers
-    return render(request, 'practice/fraction_practice.html', context)
+class TestFractionView(TemplateView):
+    template_name = "practice/fraction_practice.html"
+    model = Question
+    paginate_by = 1
+
+    def get_context_data(self, **kwargs):
+        questions = get_ten_random_questions(Question, 5)
+        pager, question, context = page_handler(questions, self.request)
+        answers = question.possible_solutions.split('|')
+        table_cells = int(question.description) * 'x'
+        context['table_cells'] = table_cells
+        context['pager'] = pager
+        context['question'] = question
+        context['answers'] = answers
+        return context
+
+
+# def fraction_fill_in(request):
+#     questions = Question.objects.filter(flavor=5)
+#     questions = list(questions)
+#     random.seed(42)
+#     random.shuffle(questions)
+#     questions = questions[:10]
+#     paginator = Paginator(questions, 1)
+#     page = request.GET.get('page')
+#     print(paginator.num_pages)
+#     context = {}
+#     try:
+#         pager = paginator.page(page)
+#         question = pager[0]
+#     except PageNotAnInteger:
+#         # If page is not an integer, deliver first page.
+#         pager = paginator.page(1)
+#         question = pager[0]
+#     except EmptyPage:
+#         # If page is out of range (e.g. 9999), deliver last page of results.
+#         # pager = paginator.page(paginator.num_pages)
+#         return HttpResponseRedirect('/')
+#     answers = question.possible_solutions.split('|')
+#     table_cells = int(question.description) * 'x'
+#     context['table_cells'] = table_cells
+#     context['pager'] = pager
+#     context['question'] = question
+#     context['answers'] = answers
+#     return render(request, 'practice/fraction_practice.html', context)
 
 
 def multiple_select(request):
